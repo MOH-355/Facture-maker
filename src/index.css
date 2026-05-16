@@ -1,0 +1,546 @@
+:root {
+  --bg-color: #f3f4f6;
+  --panel-bg: #ffffff;
+  --text-main: #1f2937;
+  --text-muted: #6b7280;
+  --border-color: #e5e7eb;
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --danger-color: #ef4444;
+  --danger-hover: #dc2626;
+  --a4-width: 210mm;
+  --a4-height: 297mm;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+/* Layout */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.toolbar {
+  height: 60px;
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 15px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  z-index: 10;
+  overflow-x: auto;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 5px;
+}
+
+.workspace {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #fff;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.btn:hover {
+  background-color: #f9fafb;
+}
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+.btn-danger {
+  color: var(--danger-color);
+  border-color: transparent;
+}
+.btn-danger:hover {
+  background-color: #fef2f2;
+}
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Canvas / A4 Page */
+.invoice-page {
+  width: var(--a4-width);
+  min-height: var(--a4-height);
+  height: var(--a4-height);
+  background: white;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  padding: 40px 50px;
+  position: relative;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Snapping Lines */
+.snap-line-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: #ec4899;
+  z-index: 20;
+  pointer-events: none;
+}
+.snap-line-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #ec4899;
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background-color: white;
+  }
+  .toolbar {
+    display: none !important;
+  }
+  .workspace {
+    padding: 0;
+    overflow: visible;
+  }
+  .invoice-page {
+    box-shadow: none;
+    border-radius: 0;
+    width: 100%;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .draggable-item {
+    border: none !important;
+  }
+  .draggable-item .drag-handle, 
+  .draggable-item .resize-handle, 
+  .draggable-item .controls,
+  .print-hide {
+    display: none !important;
+  }
+  .editable-text, .td-input {
+    border: none !important;
+    background: transparent !important;
+    resize: none !important;
+  }
+  .snap-line-v, .snap-line-h {
+    display: none !important;
+  }
+  .resizer {
+    display: none !important;
+  }
+}
+
+/* Exporting states for HTML2Canvas */
+.is-exporting .print-hide,
+.is-exporting .export-hide,
+.is-exporting .resizer,
+.is-exporting .snap-line-v,
+.is-exporting .snap-line-h {
+  display: none !important;
+}
+
+.export-show {
+  display: none;
+}
+
+.is-exporting .export-show {
+  display: block !important;
+}
+
+.is-exporting .editable-text,
+.is-exporting .td-input,
+.is-exporting .th-input,
+.is-exporting .tva-input {
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Editing Inputs */
+.editable-text {
+  border: 1px dashed transparent;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: border-color 0.2s;
+  background: transparent;
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  resize: none;
+}
+.editable-text:hover, .editable-text:focus {
+  border-color: var(--border-color);
+  outline: none;
+  background: #f9fafb;
+}
+
+.text-area {
+  min-height: 1.5em;
+  overflow: hidden;
+}
+.hidden-file-input {
+  display: none;
+}
+
+/* Draggable & Resizable Item */
+.draggable-item {
+  position: absolute;
+  border: 1px dashed transparent;
+  z-index: 5;
+}
+.draggable-item:hover {
+  border-color: var(--border-color);
+}
+.draggable-item.active {
+  border-color: var(--primary-color);
+  z-index: 6;
+}
+.drag-handle {
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: rgba(0,0,0,0.1);
+  cursor: move;
+  display: none;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+.draggable-item:hover .drag-handle, .draggable-item.active .drag-handle {
+  display: block;
+}
+.draggable-item > .resize-handle {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--primary-color);
+  cursor: nwse-resize;
+  border-radius: 50%;
+  display: none;
+}
+.draggable-item:hover > .resize-handle, .draggable-item.active > .resize-handle {
+  display: block;
+}
+.controls {
+  position: absolute;
+  top: -45px;
+  left: 0;
+  background: white;
+  border: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  display: none;
+  z-index: 10;
+  white-space: nowrap;
+}
+.draggable-item:hover .controls, .draggable-item.active .controls {
+  display: flex;
+}
+.controls button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+}
+.controls button:hover {
+  background: var(--bg-color);
+}
+.controls button.active {
+  background: #e0e7ff;
+  color: var(--primary-color);
+}
+.controls input[type="color"] {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.controls select, .controls input[type="number"] {
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.controls-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 4px;
+}
+
+/* Content wrappers */
+.item-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.logo-content img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Table Area */
+.table-area {
+  position: relative;
+}
+
+/* Table Styles */
+.invoice-table {
+  width: calc(100% + 40px);
+  margin-right: -40px;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  table-layout: fixed; /* Necessary for absolute column widths */
+}
+@media print {
+  .invoice-table {
+    width: 100%;
+    margin-right: 0;
+  }
+}
+.is-exporting .invoice-table {
+  width: 100%;
+  margin-right: 0;
+}
+.invoice-table th, .invoice-table td {
+  border: 1px solid #000;
+}
+.invoice-table th.col-actions, .invoice-table td.col-actions {
+  border: none !important;
+}
+.invoice-table th {
+  background-color: var(--bg-color);
+  padding: 0;
+  text-align: center;
+  position: relative; /* For col-resizer */
+}
+.invoice-table td {
+  padding: 10px;
+  vertical-align: middle;
+  text-align: center;
+  position: relative; /* For row-resizer */
+}
+
+.th-input {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #000;
+  font-weight: bold;
+  font-family: inherit;
+  text-align: center;
+}
+.th-input:hover, .th-input:focus {
+  background: #e5e7eb;
+  outline: none;
+}
+
+.cell-right {
+  text-align: right;
+}
+.cell-center {
+  text-align: center;
+}
+.td-input {
+  width: 100%;
+  height: auto;
+  border: 1px dashed transparent;
+  padding: 0;
+  background: transparent;
+  text-align: inherit;
+  font-family: inherit;
+  resize: none; /* NO NATIVE RESIZER */
+  overflow: hidden;
+  min-height: 2em;
+}
+.td-input:hover, .td-input:focus {
+  border-color: var(--border-color);
+  outline: none;
+  background: #f9fafb;
+}
+
+/* EXCEL STYLE RESIZERS */
+.resizer {
+  position: absolute;
+  z-index: 10;
+  transition: background-color 0.1s;
+}
+.col-resizer {
+  top: 0;
+  right: -5px;
+  width: 10px;
+  bottom: 0;
+  cursor: col-resize;
+}
+.col-resizer:hover, .col-resizer.resizing {
+  background-color: var(--primary-color);
+  opacity: 0.3;
+}
+.row-resizer {
+  bottom: -5px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: row-resize;
+}
+.row-resizer:hover, .row-resizer.resizing {
+  background-color: var(--primary-color);
+  opacity: 0.3;
+}
+
+
+/* Totals Section */
+.totals-section {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.totals-table {
+  width: 300px;
+  border-collapse: collapse;
+}
+.totals-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+.totals-table tr:last-child td {
+  border-bottom: none;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+.totals-table .label {
+  text-align: left;
+  font-weight: 500;
+}
+.totals-table .value {
+  text-align: right;
+}
+.tva-input {
+  width: 50px;
+  border: 1px dashed transparent;
+  text-align: right;
+}
+.tva-input:hover, .tva-input:focus {
+  border-color: var(--border-color);
+  outline: none;
+}
+
+/* Letters & Signature Section */
+.footer-area {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 40px;
+  align-items: flex-start;
+}
+
+.amount-in-letters {
+  background-color: var(--bg-color);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.amount-in-letters strong {
+  color: #000;
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+.amount-in-letters p {
+  color: #000;
+  font-weight: bold;
+  margin: 0;
+}
+
+.signature-box {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+}
+.signature-box input {
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  color: #000;
+}
+.signature-area {
+  height: 100px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+}
