@@ -302,8 +302,50 @@ export default function App() {
     }));
   };
 
-  const addColumn = () => setCustomCols([...customCols, { id: 'col_' + Date.now(), name: 'Nouvelle Colonne' }]);
-  const removeColumn = (id) => setCustomCols(customCols.filter(c => c.id !== id));
+  const addColumn = () => {
+    const newColId = 'col_' + Date.now();
+    setCustomCols([...customCols, { id: newColId, name: 'Nouvelle Colonne' }]);
+    setColWidths(prev => {
+      const currentTotalWidth = Object.values(prev).reduce((acc, val) => acc + (val || 0), 0);
+      const newColRequestedWidth = 80;
+      
+      const scaleFactor = (currentTotalWidth - newColRequestedWidth) / currentTotalWidth;
+      
+      const newWidths = {};
+      Object.keys(prev).forEach(key => {
+        newWidths[key] = Math.max(40, prev[key] * scaleFactor);
+      });
+      newWidths[newColId] = newColRequestedWidth;
+      
+      return newWidths;
+    });
+  };
+
+  const removeColumn = (id) => {
+    setCustomCols(customCols.filter(c => c.id !== id));
+    setColWidths(prev => {
+      const removedWidth = prev[id] || 80;
+      const currentTotalWidth = Object.values(prev).reduce((acc, val) => acc + (val || 0), 0);
+      const remainingWidth = currentTotalWidth - removedWidth;
+      
+      if (remainingWidth <= 0 || Object.keys(prev).length <= 1) {
+        const newWidths = { ...prev };
+        delete newWidths[id];
+        return newWidths;
+      }
+      
+      const scaleFactor = currentTotalWidth / remainingWidth;
+      
+      const newWidths = {};
+      Object.keys(prev).forEach(key => {
+        if (key !== id) {
+          newWidths[key] = prev[key] * scaleFactor;
+        }
+      });
+      return newWidths;
+    });
+  };
+
   const updateColumn = (id, name) => setCustomCols(customCols.map(c => c.id === id ? { ...c, name } : c));
 
   const addTextbox = () => {
