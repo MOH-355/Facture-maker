@@ -1,53 +1,75 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Download, Image as ImageIcon, Save, Upload, Type, AlignLeft, AlignCenter, AlignRight, Bold, Underline, Columns, FilePlus } from 'lucide-react';
-import writtenNumber from 'written-number';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { 
+  Plus, Trash2, Download, Image as ImageIcon, Save, Upload, Type, 
+  AlignLeft, AlignCenter, AlignRight, Bold, Underline, Columns, 
+  FilePlus, Sparkles, CheckCircle, Percent, CreditCard, ChevronDown, 
+  Layers, Move, CornerDownRight, Maximize2, ShieldCheck
+} from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// Default State Values
-const defaultLogo = { id: 'logo', src: null, x: 50, y: 50, w: 200, h: 100 };
-const defaultSignature = { id: 'signature', x: 450, y: 800, w: 250, h: 150 };
-const defaultAmountBox = { id: 'amountLetters', x: 50, y: 800, w: 350, h: 100 };
+import { 
+  DOCUMENT_TYPES, PAPER_FORMATS, THEMES, ACCENT_COLORS, 
+  CURRENCIES, FONT_FAMILIES, WATERMARKS 
+} from './types/documentTypes';
+import { formatAmountInWords } from './utils/numberToWords';
+import ClientManagerModal from './components/ClientManagerModal';
+import ItemCatalogModal from './components/ItemCatalogModal';
+import StudioToolbar from './components/StudioToolbar';
+
+// Default initial state
+const defaultLogo = { id: 'logo', src: null, x: 40, y: 40, w: 180, h: 80 };
+const defaultSignature = { id: 'signature', x: 500, y: 780, w: 250, h: 140 };
+const defaultAmountBox = { id: 'amountLetters', x: 40, y: 780, w: 420, h: 100 };
+const defaultBankDetailsBox = { 
+  id: 'bank-details', 
+  x: 40, y: 900, w: 420, h: 90, 
+  text: 'Coordonnées Bancaires :\nBanque : BRED Banque Populaire\nIBAN : FR76 3000 4000 0100 2345 6789 012\nBIC : BPOPFRPPXXX', 
+  align: 'left', fontSize: 11, color: '#4b5563', isBold: false, isUnderline: false 
+};
+
 const defaultInvoiceMeta = {
-  number: 'INV-2023-001',
+  number: 'FAC-2026-001',
   date: new Date().toISOString().split('T')[0],
-  dueDate: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]
+  dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  poNumber: 'PO-9842',
+  validity: '30 jours'
 };
+
 const defaultTableHeaders = {
-  desc: 'Description',
+  desc: 'Description / Prestation',
   qty: 'Qté',
-  price: 'Prix Unitaire HT',
-  total: 'Montant HT'
+  price: 'Prix Unit. HT',
+  total: 'Total HT'
 };
+
 const defaultItems = [
-  { id: 1, desc: 'Service de développement web', qty: 1, price: 1500, customData: {} },
-  { id: 2, desc: 'Hébergement annuel', qty: 1, price: 200, customData: {} },
-  { id: 3, desc: 'Maintenance technique', qty: 12, price: 50, customData: {} },
-  { id: 4, desc: '', qty: 0, price: 0, customData: {} },
-  { id: 5, desc: '', qty: 0, price: 0, customData: {} },
-  { id: 6, desc: '', qty: 0, price: 0, customData: {} }
+  { id: 1, desc: 'Conception & Développement Web App (React / Vite)', qty: 1, price: 1800, customData: {} },
+  { id: 2, desc: 'Intégration API & Base de données', qty: 1, price: 750, customData: {} },
+  { id: 3, desc: 'Maintenance corrective & Support technique (1 an)', qty: 12, price: 65, customData: {} }
 ];
+
 const defaultCustomTextboxes = [
   {
     id: 'company-info',
-    x: 450, y: 50, w: 250, h: 120,
-    text: 'VOTRE ENTREPRISE\n123 Rue de la Paix\n75000 Paris, France\ncontact@entreprise.com\n+33 1 23 45 67 89\nSIRET: 123 456 789 00012',
+    x: 480, y: 40, w: 270, h: 130,
+    text: 'VOTRE ENTREPRISE SAS\n123 Boulevard Saint-Germain\n75006 Paris, France\ncontact@monentreprise.com\n+33 1 45 67 89 00\nSIRET: 889 123 456 00018\nTVA: FR 32 889123456',
     align: 'right',
-    fontSize: 14, color: '#1f2937', isBold: false, isUnderline: false
+    fontSize: 12, color: '#374151', isBold: false, isUnderline: false
   },
   {
     id: 'client-info',
-    x: 50, y: 180, w: 250, h: 100,
-    text: 'Facturé à :\nNOM DU CLIENT\n456 Avenue des Champs\n69000 Lyon, France\nclient@email.com',
+    x: 40, y: 150, w: 320, h: 110,
+    text: 'Facturé à :\nENTREPRISE CLIENTE\n456 Avenue des Champs-Élysées\n75008 Paris, France\ncontact@client.com\nN° TVA / SIRET : FR 54 987654321',
     align: 'left',
-    fontSize: 14, color: '#1f2937', isBold: false, isUnderline: false
+    fontSize: 12, color: '#374151', isBold: false, isUnderline: false
   }
 ];
 
-// Helper to load state
+// Helper to load state from localStorage
 const loadSavedData = () => {
   try {
-    const saved = localStorage.getItem('invoiceAppSavedState');
+    const saved = localStorage.getItem('invoiceAppSavedState_v2');
     if (saved) return JSON.parse(saved);
   } catch (e) {
     console.error("Failed to parse saved state", e);
@@ -56,7 +78,10 @@ const loadSavedData = () => {
 };
 
 // Reusable Draggable & Resizable Box
-const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRef, setSnapLines, allItems }) => {
+const DraggableBox = ({ 
+  item, updateItem, removeItem, children, isLogo, 
+  canvasRef, setSnapLines, allItems, showGrid 
+}) => {
   const [active, setActive] = useState(false);
 
   const handlePointerDown = (e, type) => {
@@ -81,7 +106,7 @@ const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRe
         let snapX = null;
         let snapY = null;
 
-        const SNAP_THRESHOLD = 15;
+        const SNAP_THRESHOLD = 12;
 
         if (allItems) {
           const otherItems = allItems.filter(i => i.id !== item.id);
@@ -102,15 +127,27 @@ const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRe
 
           if (snapX === null) {
             if (Math.abs((targetX + startW / 2) - centerX) < SNAP_THRESHOLD) { targetX = centerX - startW / 2; snapX = centerX; }
-            else if (Math.abs(targetX - 50) < SNAP_THRESHOLD) { targetX = 50; snapX = 50; }
-            else if (Math.abs((targetX + startW) - (canvasWidth - 50)) < SNAP_THRESHOLD) { targetX = canvasWidth - startW - 50; snapX = canvasWidth - 50; }
+            else if (Math.abs(targetX - 40) < SNAP_THRESHOLD) { targetX = 40; snapX = 40; }
+            else if (Math.abs((targetX + startW) - (canvasWidth - 40)) < SNAP_THRESHOLD) { targetX = canvasWidth - startW - 40; snapX = canvasWidth - 40; }
           }
         }
 
+        // Snap to grid (10px grid step)
+        if (showGrid) {
+          targetX = Math.round(targetX / 10) * 10;
+          targetY = Math.round(targetY / 10) * 10;
+        }
+
         setSnapLines({ x: snapX, y: snapY });
-        updateItem(item.id, { x: targetX, y: targetY });
+        updateItem(item.id, { x: Math.max(0, targetX), y: Math.max(0, targetY) });
       } else if (type === 'resize') {
-        updateItem(item.id, { w: Math.max(50, startW + dx), h: Math.max(30, startH + dy) });
+        let newW = Math.max(50, startW + dx);
+        let newH = Math.max(25, startH + dy);
+        if (showGrid) {
+          newW = Math.round(newW / 10) * 10;
+          newH = Math.round(newH / 10) * 10;
+        }
+        updateItem(item.id, { w: newW, h: newH });
       }
     };
 
@@ -140,8 +177,8 @@ const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRe
       
       {!isLogo && active && (
         <div className="controls print-hide" onClick={(e) => e.stopPropagation()}>
-          <button className={item.isBold ? 'active' : ''} onClick={() => updateItem(item.id, { isBold: !item.isBold })}><Bold size={14}/></button>
-          <button className={item.isUnderline ? 'active' : ''} onClick={() => updateItem(item.id, { isUnderline: !item.isUnderline })}><Underline size={14}/></button>
+          <button className={item.isBold ? 'active' : ''} onClick={() => updateItem(item.id, { isBold: !item.isBold })} title="Gras"><Bold size={13}/></button>
+          <button className={item.isUnderline ? 'active' : ''} onClick={() => updateItem(item.id, { isUnderline: !item.isUnderline })} title="Souligné"><Underline size={13}/></button>
           
           <div className="controls-divider"></div>
           
@@ -153,27 +190,27 @@ const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRe
           />
           <input 
             type="number" 
-            style={{ width: '50px' }}
-            value={item.fontSize || 14} 
-            onChange={(e) => updateItem(item.id, { fontSize: parseInt(e.target.value) || 14 })}
-            title="Taille de la police"
+            style={{ width: '46px' }}
+            value={item.fontSize || 12} 
+            onChange={(e) => updateItem(item.id, { fontSize: parseInt(e.target.value) || 12 })}
+            title="Taille de police (px)"
           />
 
           <div className="controls-divider"></div>
 
-          <button className={item.align === 'left' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'left' })}><AlignLeft size={14}/></button>
-          <button className={item.align === 'center' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'center' })}><AlignCenter size={14}/></button>
-          <button className={item.align === 'right' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'right' })}><AlignRight size={14}/></button>
+          <button className={item.align === 'left' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'left' })} title="Aligner à gauche"><AlignLeft size={13}/></button>
+          <button className={item.align === 'center' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'center' })} title="Centrer"><AlignCenter size={13}/></button>
+          <button className={item.align === 'right' ? 'active' : ''} onClick={() => updateItem(item.id, { align: 'right' })} title="Aligner à droite"><AlignRight size={13}/></button>
           
           <div className="controls-divider"></div>
           
-          {removeItem && <button onClick={() => removeItem(item.id)} style={{ color: 'var(--danger-color)' }}><Trash2 size={14}/></button>}
+          {removeItem && <button onClick={() => removeItem(item.id)} style={{ color: 'var(--danger-color)' }} title="Supprimer le bloc"><Trash2 size={13}/></button>}
         </div>
       )}
       
       {isLogo && active && (
         <div className="controls print-hide" onClick={(e) => e.stopPropagation()}>
-           <button onClick={() => removeItem(item.id)} style={{ color: 'var(--danger-color)' }}><Trash2 size={14}/></button>
+           <button onClick={() => removeItem(item.id)} style={{ color: 'var(--danger-color)' }} title="Supprimer le logo"><Trash2 size={13}/></button>
         </div>
       )}
 
@@ -189,189 +226,348 @@ const DraggableBox = ({ item, updateItem, removeItem, children, isLogo, canvasRe
 export default function App() {
   const savedData = loadSavedData();
 
+  // Document Config
+  const [documentType, setDocumentType] = useState(savedData?.documentType || 'facture');
+  const [paperFormat, setPaperFormat] = useState(savedData?.paperFormat || 'a4-portrait');
+  const [theme, setTheme] = useState(savedData?.theme || 'modern');
+  const [accentColor, setAccentColor] = useState(savedData?.accentColor || '#2563eb');
+  const [fontFamily, setFontFamily] = useState(savedData?.fontFamily || "'Inter', sans-serif");
+  const [currency, setCurrency] = useState(savedData?.currency || 'EUR');
+  const [wordsLanguage, setWordsLanguage] = useState(savedData?.wordsLanguage || 'fr');
+  const [watermark, setWatermark] = useState(savedData?.watermark || 'NONE');
+  const [showGrid, setShowGrid] = useState(savedData?.showGrid ?? false);
+
+  // Content state
   const [logo, setLogo] = useState(savedData?.logo || defaultLogo);
   const [invoiceMeta, setInvoiceMeta] = useState(savedData?.invoiceMeta || defaultInvoiceMeta);
   const [tableHeaders, setTableHeaders] = useState(savedData?.tableHeaders || defaultTableHeaders);
   const [customCols, setCustomCols] = useState(savedData?.customCols || []);
   const [items, setItems] = useState(savedData?.items || defaultItems);
   const [taxRate, setTaxRate] = useState(savedData?.taxRate !== undefined ? savedData.taxRate : 20);
+  const [discountPercent, setDiscountPercent] = useState(savedData?.discountPercent || 0);
+  const [downPayment, setDownPayment] = useState(savedData?.downPayment || 0);
+  
   const [customTextboxes, setCustomTextboxes] = useState(savedData?.customTextboxes || defaultCustomTextboxes);
-  const [signatureLabel, setSignatureLabel] = useState(savedData?.signatureLabel || 'Signature');
+  const [customImages, setCustomImages] = useState(savedData?.customImages || []);
+  const [signatureLabel, setSignatureLabel] = useState(savedData?.signatureLabel || 'Date et Signature (précédée de "Bon pour accord")');
   const [signatureBox, setSignatureBox] = useState(savedData?.signatureBox || defaultSignature);
   const [amountBox, setAmountBox] = useState(savedData?.amountBox || defaultAmountBox);
-  const [tableMarginTop, setTableMarginTop] = useState(savedData?.tableMarginTop ?? 300);
-  const [customImages, setCustomImages] = useState(savedData?.customImages || []);
-  
-  // Table Resizing State
-  const [colWidths, setColWidths] = useState(savedData?.colWidths || { desc: 350, qty: 80, price: 100, total: 100 });
+  const [bankDetailsBox, setBankDetailsBox] = useState(savedData?.bankDetailsBox || defaultBankDetailsBox);
+  const [tableMarginTop, setTableMarginTop] = useState(savedData?.tableMarginTop ?? 280);
+
+  // Table Column & Row Resizing
+  const [colWidths, setColWidths] = useState(savedData?.colWidths || { desc: 360, qty: 70, price: 110, total: 110 });
   const [rowHeights, setRowHeights] = useState(savedData?.rowHeights || {});
+
+  // History Stack for Undo/Redo
+  const [history, setHistory] = useState([]);
+  const [future, setFuture] = useState([]);
+
+  // Modals state
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [snapLines, setSnapLines] = useState({ x: null, y: null });
   const [ttcInLetters, setTtcInLetters] = useState('');
-  
+
   const invoiceRef = useRef(null);
   const fileInputRef = useRef(null);
   const jsonInputRef = useRef(null);
   const addImageInputRef = useRef(null);
 
-  // Auto-Save to Local Storage
-  useEffect(() => {
-    const data = { logo, invoiceMeta, items, taxRate, customTextboxes, customImages, tableHeaders, signatureLabel, customCols, colWidths, rowHeights, signatureBox, amountBox, tableMarginTop };
-    localStorage.setItem('invoiceAppSavedState', JSON.stringify(data));
-  }, [logo, invoiceMeta, items, taxRate, customTextboxes, customImages, tableHeaders, signatureLabel, customCols, colWidths, rowHeights, signatureBox, amountBox, tableMarginTop]);
+  // Currency object
+  const curr = CURRENCIES[currency] || CURRENCIES.EUR;
+  const currentDocType = DOCUMENT_TYPES[documentType] || DOCUMENT_TYPES.facture;
+  const currentFormat = PAPER_FORMATS[paperFormat] || PAPER_FORMATS['a4-portrait'];
+  const currentWatermark = WATERMARKS.find(w => w.id === watermark) || WATERMARKS[0];
 
   // Calculations
-  const totalHT = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
-  const tvaAmount = totalHT * (taxRate / 100);
-  const totalTTC = totalHT + tvaAmount;
+  const subtotalHT = items.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0)), 0);
+  const discountAmount = subtotalHT * ((parseFloat(discountPercent) || 0) / 100);
+  const netHT = Math.max(0, subtotalHT - discountAmount);
+  const tvaAmount = netHT * ((parseFloat(taxRate) || 0) / 100);
+  const totalTTC = netHT + tvaAmount;
+  const balanceDue = Math.max(0, totalTTC - (parseFloat(downPayment) || 0));
 
+  // Update Amount in Words
   useEffect(() => {
+    const formatted = formatAmountInWords(balanceDue, currency, wordsLanguage);
+    setTtcInLetters(formatted);
+  }, [balanceDue, currency, wordsLanguage]);
+
+  // Push to history for undo
+  const saveSnapshot = useCallback(() => {
+    const state = {
+      documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+      watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+      discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+      signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+    };
+    setHistory(prev => [...prev.slice(-25), JSON.stringify(state)]);
+    setFuture([]);
+  }, [
+    documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+    watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+    discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+    signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+  ]);
+
+  // Auto-Save to Local Storage
+  useEffect(() => {
+    const state = {
+      documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+      watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+      discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+      signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+    };
+    localStorage.setItem('invoiceAppSavedState_v2', JSON.stringify(state));
+  }, [
+    documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+    watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+    discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+    signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+  ]);
+
+  // Undo / Redo Handlers
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const currentState = {
+      documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+      watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+      discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+      signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+    };
+    const previousStateJson = history[history.length - 1];
+    setHistory(prev => prev.slice(0, -1));
+    setFuture(prev => [JSON.stringify(currentState), ...prev]);
+
+    applyStateFromJson(previousStateJson);
+  };
+
+  const handleRedo = () => {
+    if (future.length === 0) return;
+    const currentState = {
+      documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+      watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+      discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+      signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+    };
+    const nextStateJson = future[0];
+    setFuture(prev => prev.slice(1));
+    setHistory(prev => [...prev, JSON.stringify(currentState)]);
+
+    applyStateFromJson(nextStateJson);
+  };
+
+  const applyStateFromJson = (jsonString) => {
     try {
-      const integerPart = Math.floor(totalTTC);
-      const decimalPart = Math.round((totalTTC - integerPart) * 100);
-      
-      let text = writtenNumber(integerPart, { lang: 'fr' });
-      text += ' euro' + (integerPart > 1 ? 's' : '');
-      
-      if (decimalPart > 0) {
-        text += ' et ' + writtenNumber(decimalPart, { lang: 'fr' }) + ' centime' + (decimalPart > 1 ? 's' : '');
-      }
-      
-      setTtcInLetters(text.charAt(0).toUpperCase() + text.slice(1));
+      const data = JSON.parse(jsonString);
+      if (data.documentType !== undefined) setDocumentType(data.documentType);
+      if (data.paperFormat !== undefined) setPaperFormat(data.paperFormat);
+      if (data.theme !== undefined) setTheme(data.theme);
+      if (data.accentColor !== undefined) setAccentColor(data.accentColor);
+      if (data.fontFamily !== undefined) setFontFamily(data.fontFamily);
+      if (data.currency !== undefined) setCurrency(data.currency);
+      if (data.wordsLanguage !== undefined) setWordsLanguage(data.wordsLanguage);
+      if (data.watermark !== undefined) setWatermark(data.watermark);
+      if (data.showGrid !== undefined) setShowGrid(data.showGrid);
+      if (data.logo) setLogo(data.logo);
+      if (data.invoiceMeta) setInvoiceMeta(data.invoiceMeta);
+      if (data.tableHeaders) setTableHeaders(data.tableHeaders);
+      if (data.customCols) setCustomCols(data.customCols);
+      if (data.items) setItems(data.items);
+      if (data.taxRate !== undefined) setTaxRate(data.taxRate);
+      if (data.discountPercent !== undefined) setDiscountPercent(data.discountPercent);
+      if (data.downPayment !== undefined) setDownPayment(data.downPayment);
+      if (data.customTextboxes) setCustomTextboxes(data.customTextboxes);
+      if (data.customImages) setCustomImages(data.customImages);
+      if (data.signatureLabel !== undefined) setSignatureLabel(data.signatureLabel);
+      if (data.signatureBox) setSignatureBox(data.signatureBox);
+      if (data.amountBox) setAmountBox(data.amountBox);
+      if (data.bankDetailsBox) setBankDetailsBox(data.bankDetailsBox);
+      if (data.tableMarginTop !== undefined) setTableMarginTop(data.tableMarginTop);
+      if (data.colWidths) setColWidths(data.colWidths);
+      if (data.rowHeights) setRowHeights(data.rowHeights);
     } catch (e) {
-      setTtcInLetters('');
+      console.error("Failed to parse state", e);
     }
-  }, [totalTTC]);
+  };
 
+  // Keyboard Shortcuts (Ctrl+Z, Ctrl+Y)
   useEffect(() => {
-    const textareas = document.querySelectorAll('textarea.td-input');
-    textareas.forEach(ta => {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    });
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
-  // Handlers
-  const handleLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => setLogo({ ...logo, src: event.target.result });
-      reader.readAsDataURL(file);
-    }
+  // Switch Document Type
+  const handleDocumentTypeChange = (newType) => {
+    saveSnapshot();
+    const config = DOCUMENT_TYPES[newType] || DOCUMENT_TYPES.facture;
+    setDocumentType(newType);
+    
+    // Auto-update prefix if still using default pattern
+    const currentNum = invoiceMeta.number;
+    const parts = currentNum.split('-');
+    const suffix = parts.length > 1 ? parts.slice(1).join('-') : '2026-001';
+    setInvoiceMeta({ ...invoiceMeta, number: `${config.defaultPrefix}${suffix}` });
   };
 
-  const updateLogo = (id, changes) => setLogo({ ...logo, ...changes });
-  const removeLogo = () => setLogo({ ...logo, src: null });
-  
-  const handleAddImage = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCustomImages([...customImages, {
-          id: 'img_' + Date.now(),
-          src: event.target.result,
-          x: invoiceRef.current ? invoiceRef.current.offsetWidth / 2 - 75 : 50,
-          y: 100,
-          w: 150,
-          h: 150
-        }]);
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = ''; // Reset input so same file can be selected again
+  // 1-Click Convert Quote (Devis) to Invoice (Facture)
+  const handleConvertToInvoice = () => {
+    saveSnapshot();
+    setDocumentType('facture');
+    const parts = invoiceMeta.number.split('-');
+    const suffix = parts.length > 1 ? parts.slice(1).join('-') : '2026-001';
+    setInvoiceMeta({
+      ...invoiceMeta,
+      number: `FAC-${suffix}`,
+      date: new Date().toISOString().split('T')[0]
+    });
   };
 
-  const updateCustomImage = (id, changes) => setCustomImages(customImages.map(img => img.id === id ? { ...img, ...changes } : img));
-  const removeCustomImage = (id) => setCustomImages(customImages.filter(img => img.id !== id));
+  // Apply Client From Address Book
+  const handleApplyClient = (clientText) => {
+    saveSnapshot();
+    setCustomTextboxes(prev => {
+      const clientBox = prev.find(tb => tb.id === 'client-info');
+      if (clientBox) {
+        return prev.map(tb => tb.id === 'client-info' ? { ...tb, text: clientText } : tb);
+      } else {
+        return [...prev, {
+          id: 'client-info',
+          x: 40, y: 150, w: 320, h: 110,
+          text: clientText,
+          align: 'left', fontSize: 12, color: '#374151', isBold: false, isUnderline: false
+        }];
+      }
+    });
+  };
 
-  const addItem = () => setItems([...items, { id: Date.now(), desc: '', qty: 1, price: 0, customData: {} }]);
-  const removeItem = (id) => setItems(items.filter(item => item.id !== id));
-  
-  const updateItem = (id, field, value) => {
+  // Insert Item from Catalog
+  const handleInsertCatalogItem = (newItem) => {
+    saveSnapshot();
+    setItems(prev => [
+      ...prev,
+      { id: Date.now(), desc: newItem.desc, qty: newItem.qty || 1, price: newItem.price || 0, customData: {} }
+    ]);
+  };
+
+  // Handlers for Items
+  const addItem = () => {
+    saveSnapshot();
+    setItems([...items, { id: Date.now(), desc: '', qty: 1, price: 0, customData: {} }]);
+  };
+
+  const removeItem = (id) => {
+    saveSnapshot();
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  const updateItemField = (id, field, value) => {
     setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
-  
+
   const updateItemCustomData = (itemId, colId, value) => {
-    setItems(items.map(item => {
-      if (item.id === itemId) {
-        return { ...item, customData: { ...item.customData, [colId]: value } };
-      }
-      return item;
-    }));
+    setItems(items.map(item => item.id === itemId ? { ...item, customData: { ...item.customData, [colId]: value } } : item));
   };
 
+  // Columns Handlers
   const addColumn = () => {
+    saveSnapshot();
     const newColId = 'col_' + Date.now();
     setCustomCols([...customCols, { id: newColId, name: 'Nouvelle Colonne' }]);
-    setColWidths(prev => {
-      const currentTotalWidth = Object.values(prev).reduce((acc, val) => acc + (val || 0), 0);
-      const newColRequestedWidth = 80;
-      
-      const scaleFactor = (currentTotalWidth - newColRequestedWidth) / currentTotalWidth;
-      
-      const newWidths = {};
-      Object.keys(prev).forEach(key => {
-        newWidths[key] = Math.max(40, prev[key] * scaleFactor);
-      });
-      newWidths[newColId] = newColRequestedWidth;
-      
-      return newWidths;
-    });
+    setColWidths(prev => ({ ...prev, [newColId]: 80 }));
   };
 
   const removeColumn = (id) => {
+    saveSnapshot();
     setCustomCols(customCols.filter(c => c.id !== id));
     setColWidths(prev => {
-      const removedWidth = prev[id] || 80;
-      const currentTotalWidth = Object.values(prev).reduce((acc, val) => acc + (val || 0), 0);
-      const remainingWidth = currentTotalWidth - removedWidth;
-      
-      if (remainingWidth <= 0 || Object.keys(prev).length <= 1) {
-        const newWidths = { ...prev };
-        delete newWidths[id];
-        return newWidths;
-      }
-      
-      const scaleFactor = currentTotalWidth / remainingWidth;
-      
-      const newWidths = {};
-      Object.keys(prev).forEach(key => {
-        if (key !== id) {
-          newWidths[key] = prev[key] * scaleFactor;
-        }
-      });
-      return newWidths;
+      const next = { ...prev };
+      delete next[id];
+      return next;
     });
   };
 
-  const updateColumn = (id, name) => setCustomCols(customCols.map(c => c.id === id ? { ...c, name } : c));
+  const updateColumnName = (id, name) => {
+    setCustomCols(customCols.map(c => c.id === id ? { ...c, name } : c));
+  };
 
+  // Textboxes Handlers
   const addTextbox = () => {
+    saveSnapshot();
     setCustomTextboxes([...customTextboxes, { 
       id: Date.now().toString(), 
-      x: invoiceRef.current ? invoiceRef.current.offsetWidth/2 - 100 : 50, 
+      x: invoiceRef.current ? invoiceRef.current.offsetWidth / 2 - 100 : 50, 
       y: 100, 
-      w: 200, h: 50,
+      w: 220, h: 60,
       text: 'Nouveau texte',
-      align: 'center',
-      fontSize: 14,
-      color: '#1f2937',
+      align: 'left',
+      fontSize: 12,
+      color: '#374151',
       isBold: false,
       isUnderline: false
     }]);
   };
 
   const updateTextbox = (id, changes) => setCustomTextboxes(customTextboxes.map(tb => tb.id === id ? { ...tb, ...changes } : tb));
-  const removeTextbox = (id) => setCustomTextboxes(customTextboxes.filter(tb => tb.id !== id));
+  const removeTextbox = (id) => {
+    saveSnapshot();
+    setCustomTextboxes(customTextboxes.filter(tb => tb.id !== id));
+  };
 
-  // Reset / New Project
-  const resetProject = () => {
-    if (window.confirm("Êtes-vous sûr de vouloir commencer un nouveau projet ? Toutes les modifications non sauvegardées seront perdues.")) {
-      localStorage.removeItem('invoiceAppSavedState');
-      window.location.reload();
+  // Logo & Images Handlers
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        saveSnapshot();
+        setLogo({ ...logo, src: event.target.result });
+      };
+      reader.readAsDataURL(file);
     }
+  };
+
+  const removeLogo = () => {
+    saveSnapshot();
+    setLogo({ ...logo, src: null });
+  };
+
+  const handleAddImage = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        saveSnapshot();
+        setCustomImages([...customImages, {
+          id: 'img_' + Date.now(),
+          src: event.target.result,
+          x: invoiceRef.current ? invoiceRef.current.offsetWidth / 2 - 75 : 50,
+          y: 100,
+          w: 140,
+          h: 140
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+
+  const updateCustomImage = (id, changes) => setCustomImages(customImages.map(img => img.id === id ? { ...img, ...changes } : img));
+  const removeCustomImage = (id) => {
+    saveSnapshot();
+    setCustomImages(customImages.filter(img => img.id !== id));
   };
 
   // Resizing Handlers
@@ -399,29 +595,12 @@ export default function App() {
     let startX = e.clientX;
     let startWidth = colWidths[colId] || 100;
 
-    const columnsList = [...customCols.map(c => c.id), 'desc', 'qty', 'price', 'total'];
-    const nextColId = columnsList[columnsList.indexOf(colId) + 1];
-    let startNextWidth = nextColId ? (colWidths[nextColId] || 100) : null;
-
     const onPointerMove = (moveEvent) => {
       const dx = moveEvent.clientX - startX;
-      
-      setColWidths(prev => {
-        const newWidth = Math.max(40, startWidth + dx);
-        const actualDx = newWidth - startWidth;
-
-        if (nextColId) {
-          const newNextWidth = Math.max(40, startNextWidth - actualDx);
-          const finalDx = startNextWidth - newNextWidth;
-          return { 
-             ...prev, 
-             [colId]: startWidth + finalDx,
-             [nextColId]: newNextWidth
-          };
-        } else {
-          return { ...prev, [colId]: newWidth };
-        }
-      });
+      setColWidths(prev => ({
+        ...prev,
+        [colId]: Math.max(35, startWidth + dx)
+      }));
     };
     const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
@@ -431,68 +610,88 @@ export default function App() {
     window.addEventListener('pointerup', onPointerUp);
   };
 
-  const handleRowResize = (e, rowId) => {
-    e.stopPropagation();
-    e.preventDefault();
-    let startY = e.clientY;
-    let startHeight = rowHeights[rowId] || 40; 
-
-    const onPointerMove = (moveEvent) => {
-      const dy = moveEvent.clientY - startY;
-      setRowHeights(prev => ({ ...prev, [rowId]: Math.max(30, startHeight + dy) }));
-    };
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-    };
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+  // Reset Project
+  const resetProject = () => {
+    if (window.confirm("Êtes-vous sûr de vouloir commencer un nouveau document ? Les données actuelles seront réinitialisées.")) {
+      localStorage.removeItem('invoiceAppSavedState_v2');
+      window.location.reload();
+    }
   };
 
-  // Export & Save
+  // Export PDF & PNG
   const exportPDF = async () => {
     if (!invoiceRef.current) return;
+    setIsExporting(true);
     document.body.click(); 
     invoiceRef.current.classList.add('is-exporting');
     
     setTimeout(async () => {
       try {
-        const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true });
+        const canvas = await html2canvas(invoiceRef.current, { 
+          scale: 2.5, 
+          useCORS: true,
+          logging: false
+        });
         const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
+        
+        const isLandscape = currentFormat.orientation === 'l';
+        const pdf = new jsPDF({
+          orientation: currentFormat.orientation,
+          unit: 'mm',
+          format: currentFormat.jsPdfFormat
+        });
+
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Facture_${invoiceMeta.number}.pdf`);
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const canvasRatio = canvas.height / canvas.width;
+        const targetHeight = pdfWidth * canvasRatio;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, targetHeight));
+        pdf.save(`${currentDocType.primaryTitle}_${invoiceMeta.number}.pdf`);
+      } catch (err) {
+        console.error('PDF export failed', err);
+        alert('Erreur lors de la génération du PDF.');
       } finally {
         invoiceRef.current.classList.remove('is-exporting');
+        setIsExporting(false);
       }
-    }, 100);
+    }, 120);
   };
 
   const exportPNG = async () => {
     if (!invoiceRef.current) return;
-    document.body.click();
+    setIsExporting(true);
+    document.body.click(); 
     invoiceRef.current.classList.add('is-exporting');
     
     setTimeout(async () => {
       try {
-        const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true });
+        const canvas = await html2canvas(invoiceRef.current, { scale: 2.5, useCORS: true });
         const link = document.createElement('a');
-        link.download = `Facture_${invoiceMeta.number}.png`;
+        link.download = `${currentDocType.primaryTitle}_${invoiceMeta.number}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
+      } catch (err) {
+        console.error('PNG export failed', err);
+        alert('Erreur lors de l’export PNG.');
       } finally {
         invoiceRef.current.classList.remove('is-exporting');
+        setIsExporting(false);
       }
-    }, 100);
+    }, 120);
   };
 
+  // Save / Load Project JSON file
   const saveProject = () => {
-    const data = { logo, invoiceMeta, items, taxRate, customTextboxes, customImages, tableHeaders, signatureLabel, customCols, colWidths, rowHeights, signatureBox, amountBox, tableMarginTop };
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const state = {
+      documentType, paperFormat, theme, accentColor, fontFamily, currency, wordsLanguage,
+      watermark, showGrid, logo, invoiceMeta, tableHeaders, customCols, items, taxRate,
+      discountPercent, downPayment, customTextboxes, customImages, signatureLabel,
+      signatureBox, amountBox, bankDetailsBox, tableMarginTop, colWidths, rowHeights
+    };
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
-    link.download = `Project_${invoiceMeta.number}.invoice`;
+    link.download = `Projet_${currentDocType.primaryTitle}_${invoiceMeta.number}.invoice`;
     link.href = URL.createObjectURL(blob);
     link.click();
   };
@@ -503,317 +702,588 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
-          const data = JSON.parse(event.target.result);
-          if (data.invoiceMeta) setInvoiceMeta(data.invoiceMeta);
-          if (data.items) setItems(data.items.map(i => ({...i, customData: i.customData || {}})));
-          if (data.taxRate !== undefined) setTaxRate(data.taxRate);
-          if (data.customTextboxes) setCustomTextboxes(data.customTextboxes);
-          if (data.customImages) setCustomImages(data.customImages);
-          if (data.logo) setLogo(data.logo);
-          if (data.tableHeaders) setTableHeaders(data.tableHeaders);
-          if (data.signatureLabel) setSignatureLabel(data.signatureLabel);
-          if (data.customCols) setCustomCols(data.customCols);
-          if (data.colWidths) setColWidths(data.colWidths);
-          if (data.rowHeights) setRowHeights(data.rowHeights);
-          if (data.signatureBox) setSignatureBox(data.signatureBox);
-          if (data.amountBox) setAmountBox(data.amountBox);
-          if (data.tableMarginTop !== undefined) setTableMarginTop(data.tableMarginTop);
-        } catch (err) {
-          alert("Fichier de projet invalide.");
+          applyStateFromJson(event.target.result);
+          alert('Projet chargé avec succès !');
+        } catch {
+          alert('Format de fichier de projet invalide.');
         }
       };
       reader.readAsText(file);
     }
+    e.target.value = '';
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
-  };
-
-  const allItems = [logo, ...customTextboxes, ...customImages];
+  // All interactive boxes for snap calculations
+  const allCanvasItems = [
+    logo.src ? logo : null,
+    signatureBox,
+    amountBox,
+    bankDetailsBox,
+    ...customTextboxes,
+    ...customImages
+  ].filter(Boolean);
 
   return (
-    <div className="app-container">
-      <div className="toolbar">
-        <button className="btn" onClick={resetProject}>
-          <FilePlus size={16} /> Nouveau Projet
-        </button>
-        <button className="btn" onClick={() => fileInputRef.current.click()}>
-          <ImageIcon size={16} /> Changer Logo
-        </button>
-        <input type="file" ref={fileInputRef} onChange={handleLogoUpload} className="hidden-file-input" accept="image/*" />
-        
-        <button className="btn" onClick={() => addImageInputRef.current.click()}>
-          <ImageIcon size={16} /> Ajouter Image
-        </button>
-        <input type="file" ref={addImageInputRef} onChange={handleAddImage} className="hidden-file-input" accept="image/*" />
+    <div 
+      className="studio-app" 
+      style={{ 
+        '--accent-color': accentColor,
+        '--doc-font': fontFamily 
+      }}
+    >
+      {/* Top Professional Toolbar */}
+      <StudioToolbar
+        documentType={documentType}
+        setDocumentType={handleDocumentTypeChange}
+        paperFormat={paperFormat}
+        setPaperFormat={setPaperFormat}
+        theme={theme}
+        setTheme={setTheme}
+        accentColor={accentColor}
+        setAccentColor={setAccentColor}
+        fontFamily={fontFamily}
+        setFontFamily={setFontFamily}
+        currency={currency}
+        setCurrency={setCurrency}
+        wordsLanguage={wordsLanguage}
+        setWordsLanguage={setWordsLanguage}
+        watermark={watermark}
+        setWatermark={setWatermark}
+        showGrid={showGrid}
+        setShowGrid={setShowGrid}
+        canUndo={history.length > 0}
+        canRedo={future.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onOpenClients={() => setIsClientModalOpen(true)}
+        onOpenCatalog={() => setIsCatalogModalOpen(true)}
+        onConvertToInvoice={handleConvertToInvoice}
+        onResetProject={resetProject}
+        onSaveProject={saveProject}
+        onLoadProjectClick={() => jsonInputRef.current && jsonInputRef.current.click()}
+        onExportPDF={exportPDF}
+        onExportPNG={exportPNG}
+        isExporting={isExporting}
+      />
 
-        <button className="btn" onClick={addTextbox}>
-          <Type size={16} /> Ajouter Texte Libre
-        </button>
+      {/* Hidden File Inputs */}
+      <input type="file" ref={fileInputRef} onChange={handleLogoUpload} accept="image/*" style={{ display: 'none' }} />
+      <input type="file" ref={jsonInputRef} onChange={loadProject} accept=".invoice,.json" style={{ display: 'none' }} />
+      <input type="file" ref={addImageInputRef} onChange={handleAddImage} accept="image/*" style={{ display: 'none' }} />
 
-        <div className="toolbar-divider"></div>
-
-        <button className="btn" onClick={addColumn}>
-          <Columns size={16} /> Ajouter une colonne
-        </button>
-        <button className="btn" onClick={addItem}>
-          <Plus size={16} /> Ajouter une ligne
-        </button>
-
-        <div style={{ flex: 1 }}></div>
-
-        <button className="btn" onClick={() => jsonInputRef.current.click()}>
-          <Upload size={16} /> Charger Projet
-        </button>
-        <input type="file" ref={jsonInputRef} onChange={loadProject} className="hidden-file-input" accept=".invoice,.json" />
-        
-        <button className="btn" onClick={saveProject}>
-          <Save size={16} /> Sauvegarder Projet
-        </button>
-        <button className="btn" onClick={exportPNG}>
-          <ImageIcon size={16} /> Exporter PNG
-        </button>
-        <button className="btn btn-primary" onClick={exportPDF}>
-          <Download size={16} /> Exporter PDF
-        </button>
-      </div>
-
-      <div className="workspace">
-        <div className="invoice-page" ref={invoiceRef}>
-          
-          {/* Snapping Overlays */}
-          {snapLines.x !== null && <div className="snap-line-v" style={{ left: snapLines.x }}></div>}
-          {snapLines.y !== null && <div className="snap-line-h" style={{ top: snapLines.y }}></div>}
-
-          {/* LOGO */}
-          <DraggableBox item={logo} updateItem={updateLogo} removeItem={removeLogo} isLogo={true} canvasRef={invoiceRef} setSnapLines={setSnapLines} allItems={allItems}>
-            {logo.src ? (
-              <img src={logo.src} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            ) : (
-              <div className="logo-content" onClick={() => fileInputRef.current.click()}>
-                <span>Cliquez pour ajouter Logo</span>
-              </div>
-            )}
-          </DraggableBox>
-
-          {/* Custom Images */}
-          {customImages.map(img => (
-            <DraggableBox key={img.id} item={img} updateItem={updateCustomImage} removeItem={removeCustomImage} isLogo={true} canvasRef={invoiceRef} setSnapLines={setSnapLines} allItems={allItems}>
-              <img src={img.src} alt="Custom" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            </DraggableBox>
-          ))}
-
-          {/* Draggable Textboxes */}
-          {customTextboxes.map(tb => (
-            <DraggableBox key={tb.id} item={tb} updateItem={updateTextbox} removeItem={removeTextbox} isLogo={false} canvasRef={invoiceRef} setSnapLines={setSnapLines} allItems={allItems}>
-              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <textarea 
-                  className="editable-text export-hide"
-                  style={{ 
-                    width: '100%', height: '100%', resize: 'none', 
-                    textAlign: tb.align || 'left', 
-                    fontWeight: tb.isBold || String(tb.id).includes('info') ? 'bold' : 'normal',
-                    textDecoration: tb.isUnderline ? 'underline' : 'none',
-                    color: tb.color || '#1f2937',
-                    fontSize: `${tb.fontSize || 14}px`
-                  }}
-                  value={tb.text} 
-                  onChange={e => updateTextbox(tb.id, { text: e.target.value })}
-                />
-                <div 
-                  className="export-show"
-                  style={{
-                    width: '100%', height: '100%',
-                    textAlign: tb.align || 'left', 
-                    fontWeight: tb.isBold || String(tb.id).includes('info') ? 'bold' : 'normal',
-                    textDecoration: tb.isUnderline ? 'underline' : 'none',
-                    color: tb.color || '#1f2937',
-                    fontSize: `${tb.fontSize || 14}px`,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    padding: '2px 4px',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {tb.text}
-                </div>
-              </div>
-            </DraggableBox>
-          ))}
-
-          {/* Table Area */}
-          <div className="table-area" style={{ marginTop: `${tableMarginTop}px` }}>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-              <div style={{ padding: '15px', border: '1px solid var(--border-color)', borderRadius: '8px', width: '300px' }}>
-                <h3 style={{ fontSize: '14px', color: '#000', marginBottom: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>Détails Facture</h3>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: '#000', fontWeight: 'bold' }}>Numéro:</span>
-                  <input className="editable-text" style={{ width: '150px', textAlign: 'right', fontWeight: 'bold', color: '#000' }} 
-                    value={invoiceMeta.number} onChange={e => setInvoiceMeta({...invoiceMeta, number: e.target.value})} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: '#000', fontWeight: 'bold' }}>Date:</span>
-                  <input type="date" className="editable-text" style={{ width: '150px', textAlign: 'right', fontWeight: 'bold', color: '#000' }} 
-                    value={invoiceMeta.date} onChange={e => setInvoiceMeta({...invoiceMeta, date: e.target.value})} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#000', fontWeight: 'bold' }}>Échéance:</span>
-                  <input type="date" className="editable-text" style={{ width: '150px', textAlign: 'right', fontWeight: 'bold', color: '#000' }} 
-                    value={invoiceMeta.dueDate} onChange={e => setInvoiceMeta({...invoiceMeta, dueDate: e.target.value})} />
-                </div>
-              </div>
-            </div>
-
-            <table className="invoice-table">
-              <thead>
-                <tr>
-                  {customCols.map(col => (
-                    <th key={col.id} style={{ position: 'relative', width: colWidths[col.id] || 100 }}>
-                      <input className="th-input" value={col.name} onChange={(e) => updateColumn(col.id, e.target.value)} />
-                      <button className="print-hide" onClick={() => removeColumn(col.id)} style={{ position: 'absolute', right: '5px', top: '10px', background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><Trash2 size={12}/></button>
-                      <div className="resizer col-resizer print-hide" onPointerDown={(e) => handleColResize(e, col.id)} />
-                    </th>
-                  ))}
-                  <th className="col-desc" style={{ position: 'relative', width: colWidths['desc'] || 350 }}>
-                    <input className="th-input" value={tableHeaders.desc} onChange={(e) => setTableHeaders({...tableHeaders, desc: e.target.value})} />
-                    <div className="resizer col-resizer print-hide" onPointerDown={(e) => handleColResize(e, 'desc')} />
-                  </th>
-                  <th className="col-qty" style={{ position: 'relative', width: colWidths['qty'] || 80 }}>
-                    <input className="th-input cell-center" value={tableHeaders.qty} onChange={(e) => setTableHeaders({...tableHeaders, qty: e.target.value})} />
-                    <div className="resizer col-resizer print-hide" onPointerDown={(e) => handleColResize(e, 'qty')} />
-                  </th>
-                  <th className="col-price" style={{ position: 'relative', width: colWidths['price'] || 100 }}>
-                    <input className="th-input cell-center" value={tableHeaders.price} onChange={(e) => setTableHeaders({...tableHeaders, price: e.target.value})} />
-                    <div className="resizer col-resizer print-hide" onPointerDown={(e) => handleColResize(e, 'price')} />
-                  </th>
-                  <th className="col-total" style={{ position: 'relative', width: colWidths['total'] || 100 }}>
-                    <input className="th-input cell-right" value={tableHeaders.total} onChange={(e) => setTableHeaders({...tableHeaders, total: e.target.value})} />
-                  </th>
-                  <th className="col-actions print-hide" style={{ width: 40 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(item => (
-                  <tr key={item.id} style={{ height: rowHeights[item.id] || 40 }}>
-                    {customCols.map(col => (
-                      <td key={col.id}>
-                        <textarea 
-                          className="td-input export-hide" 
-                          value={item.customData?.[col.id] || ''} 
-                          onChange={(e) => updateItemCustomData(item.id, col.id, e.target.value)} 
-                        />
-                        <div className="export-show" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'inherit', fontFamily: 'inherit' }}>
-                          {item.customData?.[col.id] || ''}
-                        </div>
-                        <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                      </td>
-                    ))}
-                    <td>
-                      <textarea 
-                        className="td-input export-hide" 
-                        value={item.desc} 
-                        onChange={(e) => updateItem(item.id, 'desc', e.target.value)} 
-                        placeholder="Description..."
-                      />
-                      <div className="export-show" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'inherit', fontFamily: 'inherit' }}>
-                        {item.desc}
-                      </div>
-                      <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                    </td>
-                    <td className="cell-center">
-                      <input 
-                        type="number" 
-                        className="td-input cell-center" 
-                        value={item.qty} 
-                        onChange={(e) => updateItem(item.id, 'qty', parseFloat(e.target.value) || 0)} 
-                      />
-                      <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                    </td>
-                    <td className="cell-center">
-                      <input 
-                        type="number" 
-                        className="td-input cell-center" 
-                        value={item.price} 
-                        onChange={(e) => updateItem(item.id, 'price', parseFloat(e.target.value) || 0)} 
-                      />
-                      <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                    </td>
-                    <td className="cell-right">
-                      {formatCurrency(item.qty * item.price)}
-                      <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                    </td>
-                    <td className="col-actions print-hide" style={{ textAlign: 'center' }}>
-                      <button className="btn btn-danger btn-small" onClick={() => removeItem(item.id)}>
-                        <Trash2 size={14} />
-                      </button>
-                      <div className="resizer row-resizer print-hide" onPointerDown={(e) => handleRowResize(e, item.id)} />
-                    </td>
-                  </tr>
-                ))}
-                <tr className="totals-row">
-                  <td colSpan={customCols.length + 3} style={{ textAlign: "right", paddingRight: "10px", verticalAlign: "middle" }}>
-                    <input className="td-input" style={{textAlign: "right", fontWeight: "bold", padding: 0}} value="Total HT (TTH)" readOnly />
-                  </td>
-                  <td className="cell-right" style={{ padding: '10px', verticalAlign: 'middle', fontWeight: "bold" }}>{formatCurrency(totalHT)}</td>
-                  <td className="col-actions print-hide"></td>
-                </tr>
-                <tr className="totals-row">
-                  <td colSpan={customCols.length + 3} style={{ textAlign: "right", paddingRight: "10px", verticalAlign: "middle", fontWeight: "bold" }}>
-                    <div className="export-hide">
-                      TVA(<input type="number" className="tva-input" style={{width: '45px', display: 'inline-block', textAlign: 'center', margin: '0', padding: '0'}} value={taxRate} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} />%)
-                    </div>
-                    <div className="export-show">
-                      TVA({taxRate}%)
-                    </div>
-                  </td>
-                  <td className="cell-right" style={{ padding: '10px', verticalAlign: 'middle', fontWeight: "bold" }}>{formatCurrency(tvaAmount)}</td>
-                  <td className="col-actions print-hide"></td>
-                </tr>
-                <tr className="totals-row">
-                  <td colSpan={customCols.length + 3} style={{ textAlign: "right", paddingRight: "10px", verticalAlign: "middle" }}>
-                    <input className="td-input" style={{textAlign: "right", fontWeight: "bold", padding: 0}} value="Total TTC" readOnly />
-                  </td>
-                  <td className="cell-right" style={{ padding: '10px', verticalAlign: 'middle', fontWeight: "bold" }}>{formatCurrency(totalTTC)}</td>
-                  <td className="col-actions print-hide"></td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div 
-              className="print-hide" 
-              style={{ height: '20px', cursor: 'row-resize', background: 'rgba(37, 99, 235, 0.05)', border: '1px dashed rgba(37, 99, 235, 0.3)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '12px', color: 'var(--primary-color)', marginTop: '20px' }} 
-              onPointerDown={handleTableMarginResize}
-            >
-               ↕ Glisser pour ajuster la position verticale du tableau
-            </div>
-
+      {/* Main Workspace Area */}
+      <div className="studio-workspace">
+        {/* Floating Quick Action Drawer / Sidebar */}
+        <aside className="studio-sidebar print-hide">
+          <div className="sidebar-group">
+            <span className="sidebar-group-title">Éléments</span>
+            <button className="sidebar-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+              <ImageIcon size={16}/> {logo.src ? 'Changer Logo' : 'Ajouter Logo'}
+            </button>
+            <button className="sidebar-btn" onClick={addTextbox}>
+              <Type size={16}/> Ajouter Texte
+            </button>
+            <button className="sidebar-btn" onClick={() => addImageInputRef.current && addImageInputRef.current.click()}>
+              <ImageIcon size={16}/> Insérer Image / Tampon
+            </button>
+            <button className="sidebar-btn" onClick={addColumn}>
+              <Columns size={16}/> Ajouter Colonne
+            </button>
+            <button className="sidebar-btn" onClick={addItem}>
+              <Plus size={16}/> Ajouter Ligne
+            </button>
           </div>
 
-          {/* Floating Amount In Letters */}
-          <DraggableBox item={amountBox} updateItem={(id, changes) => setAmountBox({ ...amountBox, ...changes })} isLogo={false} canvasRef={invoiceRef} setSnapLines={setSnapLines} allItems={allItems} removeItem={null}>
-            <div className="amount-in-letters" style={{ width: '100%', height: '100%', margin: 0, padding: '10px' }}>
-              <strong>Arrêté la présente facture à la somme de :</strong>
-              <p>{ttcInLetters}</p>
-            </div>
-          </DraggableBox>
+          <div className="sidebar-group">
+            <span className="sidebar-group-title">Données Rapides</span>
+            <button className="sidebar-btn" onClick={() => setIsClientModalOpen(true)}>
+              <CreditCard size={16}/> Carnet Clients
+            </button>
+            <button className="sidebar-btn" onClick={() => setIsCatalogModalOpen(true)}>
+              <Sparkles size={16}/> Catalogue Articles
+            </button>
+          </div>
+        </aside>
 
-          {/* Floating Signature */}
-          <DraggableBox item={signatureBox} updateItem={(id, changes) => setSignatureBox({ ...signatureBox, ...changes })} isLogo={false} canvasRef={invoiceRef} setSnapLines={setSnapLines} allItems={allItems} removeItem={null}>
-            <div className="signature-box" style={{ width: '100%', height: '100%' }}>
-              <input 
-                className="editable-text" 
-                style={{ textAlign: 'center' }} 
-                value={signatureLabel} 
-                onChange={(e) => setSignatureLabel(e.target.value)} 
+        {/* Canvas Viewport */}
+        <main className="canvas-viewport">
+          <div 
+            ref={invoiceRef} 
+            className={`document-canvas theme-${theme} format-${paperFormat} ${showGrid ? 'show-grid-bg' : ''}`}
+            style={{ 
+              width: `${currentFormat.width}px`, 
+              minHeight: `${currentFormat.height}px` 
+            }}
+          >
+            {/* Watermark / Stamp Overlay */}
+            {currentWatermark.text && (
+              <div 
+                className="watermark-overlay print-show" 
+                style={{ borderColor: currentWatermark.color, color: currentWatermark.color }}
+              >
+                {currentWatermark.text}
+              </div>
+            )}
+
+            {/* Alignment Guide Snap Lines */}
+            {snapLines.x !== null && (
+              <div className="snap-line-v print-hide" style={{ left: snapLines.x }}></div>
+            )}
+            {snapLines.y !== null && (
+              <div className="snap-line-h print-hide" style={{ top: snapLines.y }}></div>
+            )}
+
+            {/* Document Header Band (for Creative & Corporate themes) */}
+            <div className="doc-theme-header-band">
+              <div className="doc-theme-title-tag">
+                <span className="doc-main-badge">{currentDocType.primaryTitle}</span>
+              </div>
+            </div>
+
+            {/* Logo Box */}
+            {logo.src ? (
+              <DraggableBox 
+                item={logo} 
+                updateItem={(id, changes) => setLogo({ ...logo, ...changes })}
+                removeItem={removeLogo}
+                isLogo={true}
+                canvasRef={invoiceRef}
+                setSnapLines={setSnapLines}
+                allItems={allCanvasItems}
+                showGrid={showGrid}
+              >
+                <img src={logo.src} alt="Logo Entreprise" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </DraggableBox>
+            ) : (
+              <div 
+                className="logo-placeholder print-hide"
+                style={{ left: logo.x, top: logo.y, width: logo.w, height: logo.h }}
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              >
+                <ImageIcon size={24} className="text-muted"/>
+                <span>Cliquer pour insérer votre logo</span>
+              </div>
+            )}
+
+            {/* Custom Textboxes (Company Info, Client Info, Custom Notes) */}
+            {customTextboxes.map(tb => (
+              <DraggableBox 
+                key={tb.id} 
+                item={tb} 
+                updateItem={updateTextbox} 
+                removeItem={removeTextbox}
+                canvasRef={invoiceRef}
+                setSnapLines={setSnapLines}
+                allItems={allCanvasItems}
+                showGrid={showGrid}
+              >
+                <textarea 
+                  className={`free-textbox ${tb.isBold ? 'font-bold' : ''} ${tb.isUnderline ? 'underline' : ''}`}
+                  style={{ 
+                    textAlign: tb.align || 'left', 
+                    fontSize: `${tb.fontSize || 12}px`, 
+                    color: tb.color || '#374151' 
+                  }}
+                  value={tb.text}
+                  onChange={(e) => updateTextbox(tb.id, { text: e.target.value })}
+                  placeholder="Écrivez votre texte ici..."
+                />
+              </DraggableBox>
+            ))}
+
+            {/* Custom Inserted Images / Badges */}
+            {customImages.map(img => (
+              <DraggableBox 
+                key={img.id} 
+                item={img} 
+                updateItem={updateCustomImage} 
+                removeItem={removeCustomImage}
+                isLogo={true}
+                canvasRef={invoiceRef}
+                setSnapLines={setSnapLines}
+                allItems={allCanvasItems}
+                showGrid={showGrid}
+              >
+                <img src={img.src} alt="Image personnalisée" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </DraggableBox>
+            ))}
+
+            {/* Document Metadata Box (Number, Date, Due Date, PO) */}
+            <div className="doc-meta-card">
+              <div className="doc-meta-title-row">
+                <h1 className="doc-type-heading">{currentDocType.primaryTitle}</h1>
+                <input 
+                  type="text" 
+                  className="doc-number-input"
+                  value={invoiceMeta.number}
+                  onChange={e => setInvoiceMeta({ ...invoiceMeta, number: e.target.value })}
+                  title="Numéro du document"
+                />
+              </div>
+
+              <div className="doc-meta-fields-grid">
+                <div className="meta-field">
+                  <span className="meta-label">Date :</span>
+                  <input 
+                    type="date" 
+                    value={invoiceMeta.date} 
+                    onChange={e => setInvoiceMeta({ ...invoiceMeta, date: e.target.value })}
+                    className="meta-value-input"
+                  />
+                </div>
+
+                {currentDocType.showDueDate && (
+                  <div className="meta-field">
+                    <span className="meta-label">Date d'échéance :</span>
+                    <input 
+                      type="date" 
+                      value={invoiceMeta.dueDate} 
+                      onChange={e => setInvoiceMeta({ ...invoiceMeta, dueDate: e.target.value })}
+                      className="meta-value-input"
+                    />
+                  </div>
+                )}
+
+                {documentType === 'devis' && (
+                  <div className="meta-field">
+                    <span className="meta-label">Validité de l'offre :</span>
+                    <input 
+                      type="text" 
+                      value={invoiceMeta.validity || '30 jours'} 
+                      onChange={e => setInvoiceMeta({ ...invoiceMeta, validity: e.target.value })}
+                      className="meta-value-input"
+                    />
+                  </div>
+                )}
+
+                {(documentType === 'facture' || documentType === 'commande') && (
+                  <div className="meta-field">
+                    <span className="meta-label">Réf. Bon de commande :</span>
+                    <input 
+                      type="text" 
+                      value={invoiceMeta.poNumber || ''} 
+                      placeholder="ex: BC-2026-08"
+                      onChange={e => setInvoiceMeta({ ...invoiceMeta, poNumber: e.target.value })}
+                      className="meta-value-input"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Drag Handle to Adjust Table Top Margin */}
+            <div 
+              className="table-margin-handle print-hide"
+              style={{ top: `${tableMarginTop}px` }}
+              onPointerDown={handleTableMarginResize}
+              title="Faites glisser verticalement pour ajuster l'espacement du tableau"
+            >
+              <span>↕ Espacement du tableau ({tableMarginTop}px)</span>
+            </div>
+
+            {/* Main Interactive Items Table */}
+            <div className="document-table-section" style={{ marginTop: `${tableMarginTop}px` }}>
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    {customCols.map(col => (
+                      <th key={col.id} style={{ width: colWidths[col.id] || 80 }}>
+                        <div className="th-content">
+                          <input 
+                            type="text" 
+                            value={col.name} 
+                            onChange={e => updateColumnName(col.id, e.target.value)} 
+                            className="th-input"
+                          />
+                          <button 
+                            className="btn-remove-col print-hide" 
+                            onClick={() => removeColumn(col.id)} 
+                            title="Supprimer la colonne"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="col-resize-handle print-hide" onPointerDown={e => handleColResize(e, col.id)}></div>
+                      </th>
+                    ))}
+
+                    <th style={{ width: colWidths.desc || 360 }}>
+                      <div className="th-content">
+                        <input 
+                          type="text" 
+                          value={tableHeaders.desc} 
+                          onChange={e => setTableHeaders({ ...tableHeaders, desc: e.target.value })} 
+                          className="th-input"
+                        />
+                      </div>
+                      <div className="col-resize-handle print-hide" onPointerDown={e => handleColResize(e, 'desc')}></div>
+                    </th>
+
+                    <th style={{ width: colWidths.qty || 70, textAlign: 'center' }}>
+                      <div className="th-content">
+                        <input 
+                          type="text" 
+                          value={tableHeaders.qty} 
+                          onChange={e => setTableHeaders({ ...tableHeaders, qty: e.target.value })} 
+                          className="th-input text-center"
+                        />
+                      </div>
+                      <div className="col-resize-handle print-hide" onPointerDown={e => handleColResize(e, 'qty')}></div>
+                    </th>
+
+                    <th style={{ width: colWidths.price || 110, textAlign: 'right' }}>
+                      <div className="th-content">
+                        <input 
+                          type="text" 
+                          value={tableHeaders.price} 
+                          onChange={e => setTableHeaders({ ...tableHeaders, price: e.target.value })} 
+                          className="th-input text-right"
+                        />
+                      </div>
+                      <div className="col-resize-handle print-hide" onPointerDown={e => handleColResize(e, 'price')}></div>
+                    </th>
+
+                    <th style={{ width: colWidths.total || 110, textAlign: 'right' }}>
+                      <div className="th-content">
+                        <input 
+                          type="text" 
+                          value={tableHeaders.total} 
+                          onChange={e => setTableHeaders({ ...tableHeaders, total: e.target.value })} 
+                          className="th-input text-right"
+                        />
+                      </div>
+                      <div className="col-resize-handle print-hide" onPointerDown={e => handleColResize(e, 'total')}></div>
+                    </th>
+
+                    <th className="print-hide th-action-col"></th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {items.map(item => {
+                    const lineTotal = (parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0);
+                    return (
+                      <tr key={item.id} style={{ height: rowHeights[item.id] || 40 }}>
+                        {customCols.map(col => (
+                          <td key={col.id}>
+                            <input 
+                              type="text" 
+                              value={item.customData[col.id] || ''} 
+                              onChange={e => updateItemCustomData(item.id, col.id, e.target.value)} 
+                              className="td-input"
+                            />
+                          </td>
+                        ))}
+
+                        <td>
+                          <textarea 
+                            rows={1}
+                            value={item.desc} 
+                            onChange={e => updateItemField(item.id, 'desc', e.target.value)} 
+                            placeholder="Description de la prestation ou de l'article..."
+                            className="td-input td-textarea"
+                          />
+                        </td>
+
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={item.qty} 
+                            onChange={e => updateItemField(item.id, 'qty', parseFloat(e.target.value) || 0)} 
+                            className="td-input text-center"
+                          />
+                        </td>
+
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="price-cell">
+                            <input 
+                              type="number" 
+                              step="any"
+                              value={item.price} 
+                              onChange={e => updateItemField(item.id, 'price', parseFloat(e.target.value) || 0)} 
+                              className="td-input text-right"
+                            />
+                            <span className="currency-tag">{curr.symbol}</span>
+                          </div>
+                        </td>
+
+                        <td style={{ textAlign: 'right', fontWeight: '600' }}>
+                          {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                        </td>
+
+                        <td className="print-hide td-action-col">
+                          <button className="btn-icon btn-sm text-danger" onClick={() => removeItem(item.id)} title="Supprimer la ligne">
+                            <Trash2 size={13}/>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Add row button */}
+              <div className="table-bottom-actions print-hide">
+                <button className="btn btn-sm btn-secondary" onClick={addItem}>
+                  <Plus size={14}/> Ajouter une ligne
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setIsCatalogModalOpen(true)}>
+                  <Sparkles size={14}/> Depuis le catalogue
+                </button>
+              </div>
+
+              {/* Summary & Totals Calculation Block */}
+              <div className="totals-summary-container">
+                <div className="totals-card">
+                  {/* Subtotal HT */}
+                  <div className="total-row">
+                    <span className="total-label">Total HT :</span>
+                    <span className="total-val">
+                      {subtotalHT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                    </span>
+                  </div>
+
+                  {/* Discount */}
+                  <div className="total-row editable-row">
+                    <span className="total-label">
+                      Remise (<input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        value={discountPercent} 
+                        onChange={e => setDiscountPercent(parseFloat(e.target.value) || 0)}
+                        className="inline-number-input"
+                      /> %) :
+                    </span>
+                    <span className="total-val text-danger">
+                      - {discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                    </span>
+                  </div>
+
+                  {/* VAT / TVA */}
+                  <div className="total-row editable-row">
+                    <span className="total-label">
+                      TVA (<input 
+                        type="number" 
+                        min="0" 
+                        step="any"
+                        value={taxRate} 
+                        onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
+                        className="inline-number-input"
+                      /> %) :
+                    </span>
+                    <span className="total-val">
+                      {tvaAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                    </span>
+                  </div>
+
+                  {/* Total TTC */}
+                  <div className="total-row total-ttc-row">
+                    <span className="total-label">Total TTC :</span>
+                    <span className="total-val">
+                      {totalTTC.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                    </span>
+                  </div>
+
+                  {/* Down Payment / Acompte */}
+                  <div className="total-row editable-row">
+                    <span className="total-label">Acompte déjà versé :</span>
+                    <div className="total-input-wrapper">
+                      <input 
+                        type="number" 
+                        step="any"
+                        value={downPayment} 
+                        onChange={e => setDownPayment(parseFloat(e.target.value) || 0)}
+                        className="inline-number-input-lg text-right"
+                      />
+                      <span className="currency-tag-sm">{curr.symbol}</span>
+                    </div>
+                  </div>
+
+                  {/* Net to Pay / Balance Due */}
+                  <div className="total-row net-to-pay-row">
+                    <span className="total-label">NET À PAYER :</span>
+                    <span className="total-val-highlight">
+                      {balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {curr.symbol}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Draggable Amount in Letters Box */}
+            <DraggableBox 
+              item={amountBox} 
+              updateItem={(id, changes) => setAmountBox({ ...amountBox, ...changes })}
+              canvasRef={invoiceRef}
+              setSnapLines={setSnapLines}
+              allItems={allCanvasItems}
+              showGrid={showGrid}
+            >
+              <div className="amount-letters-card">
+                <span className="amount-letters-title">Montant arrêté en toutes lettres :</span>
+                <p className="amount-letters-text">{ttcInLetters || '—'}</p>
+              </div>
+            </DraggableBox>
+
+            {/* Draggable Bank Details Box */}
+            <DraggableBox 
+              item={bankDetailsBox} 
+              updateItem={(id, changes) => setBankDetailsBox({ ...bankDetailsBox, ...changes })}
+              canvasRef={invoiceRef}
+              setSnapLines={setSnapLines}
+              allItems={allCanvasItems}
+              showGrid={showGrid}
+            >
+              <textarea 
+                className="bank-details-textarea"
+                value={bankDetailsBox.text}
+                onChange={e => setBankDetailsBox({ ...bankDetailsBox, text: e.target.value })}
+                placeholder="Coordonnées bancaires, IBAN, instructions de paiement..."
               />
-              <div className="signature-area" style={{ flex: 1 }}></div>
-            </div>
-          </DraggableBox>
+            </DraggableBox>
 
-        </div>
+            {/* Draggable Signature Box */}
+            <DraggableBox 
+              item={signatureBox} 
+              updateItem={(id, changes) => setSignatureBox({ ...signatureBox, ...changes })}
+              canvasRef={invoiceRef}
+              setSnapLines={setSnapLines}
+              allItems={allCanvasItems}
+              showGrid={showGrid}
+            >
+              <div className="signature-card">
+                <input 
+                  type="text" 
+                  className="signature-label-input"
+                  value={signatureLabel}
+                  onChange={e => setSignatureLabel(e.target.value)}
+                  placeholder="Date et Signature"
+                />
+                <div className="signature-stamp-area">
+                  <span className="stamp-placeholder print-hide">Emplacement signature / cachet</span>
+                </div>
+              </div>
+            </DraggableBox>
+          </div>
+        </main>
       </div>
+
+      {/* Client Address Book Modal */}
+      <ClientManagerModal 
+        isOpen={isClientModalOpen}
+        onClose={() => setIsClientModalOpen(false)}
+        onSelectClient={handleApplyClient}
+      />
+
+      {/* Item & Product Catalog Modal */}
+      <ItemCatalogModal 
+        isOpen={isCatalogModalOpen}
+        onClose={() => setIsCatalogModalOpen(false)}
+        onInsertItem={handleInsertCatalogItem}
+        currencySymbol={curr.symbol}
+      />
     </div>
   );
 }
